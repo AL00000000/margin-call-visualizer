@@ -1169,6 +1169,58 @@ function downloadSource(){
   URL.revokeObjectURL(url);
 }
 
+// ---------- 終値自動取得 ----------
+async function fetchClosingPrices(){
+  // JST時刻を取得
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const jstDay = jst.getUTCDay(); // 0=日, 6=土
+  const jstHour = jst.getUTCHours();
+  const jstDate = jst.toISOString().slice(0, 10);
+
+  // 平日16時以降のみ実行
+  if(jstDay === 0 || jstDay === 6 || jstHour < 16) return;
+
+  // 当日すでに取得済みならスキップ
+  const lastFetch = localStorage.getItem('lastPriceFetch');
+  if(lastFetch === jstDate) return;
+
+  // 銘柄コードを抽出（3〜4桁数字 or 数字+英字1文字）
+  const allRows = [...state.spot, ...state.margin];
+  const codes = [...new Set(allRows.map(r => r.name).filter(n => /^\d{3,4}[A-Z0-9]?$/i.test((n||'').trim())))];
+  if(codes.length === 0) return;
+
+  const statusEl = document.getElementById('saveStatus');
+  statusEl.textContent = '終値を取得中…';
+
+  let updated = 0;
+  for(const code of codes){
+    try{
+      const ticker = encodeURIComponent(code.trim() + '.T');
+      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`);
+      if(!res.ok) continue;
+      const data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if(price){
+        allRows.forEach(r => { if(r.name === code) r.price = price; });
+        updated++;
+      }
+    }catch(e){ /* 個別銘柄の失敗はスキップ */ }
+  }
+
+  if(updated > 0){
+    localStorage.setItem('lastPriceFetch', jstDate);
+    render();
+    scheduleSave();
+    statusEl.textContent = `${updated}銘柄の終値を自動更新しました`;
+    setTimeout(()=>{
+      statusEl.textContent = currentUser ? 'クラウドに自動保存されます' : 'ログインするとクラウドに自動保存されます';
+    }, 4000);
+  } else {
+    statusEl.textContent = currentUser ? 'クラウドに自動保存されます' : 'ログインするとクラウドに自動保存されます';
+  }
+}
+
 // ---------- init ----------
 (function init(){
   buildChart();
@@ -1195,6 +1247,7 @@ function downloadSource(){
     if(user){
       document.getElementById('saveStatus').textContent = 'クラウドに自動保存されます';
     }
+    fetchClosingPrices();
   });
 
   document.getElementById('loginBtn').addEventListener('click', () => {
