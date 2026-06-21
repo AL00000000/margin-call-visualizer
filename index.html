@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>信用取引リスク・追証ライン可視化ツール</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
@@ -270,6 +273,23 @@
   .lev-row .v{color:var(--text);font-weight:600;}
   .lev-row.highlight .v{color:var(--accent);}
   .lev-sub{font-size:10.5px;color:var(--text-faint);margin-top:6px;line-height:1.6;border-top:1px solid var(--border);padding-top:6px;}
+
+  .auth-area{display:flex;align-items:center;gap:8px;margin-right:6px;}
+  #authLoggedOut{display:flex;}
+  #authLoggedIn{display:none;align-items:center;gap:6px;}
+  .login-btn{
+    background:#4285F4;color:#fff;border:none;border-radius:8px;
+    padding:7px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap;font-family:inherit;
+  }
+  .login-btn:active{background:#3367d6;}
+  .user-photo{width:24px;height:24px;border-radius:50%;object-fit:cover;}
+  .user-email{font-size:11px;color:var(--text-dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .logout-btn{
+    background:none;border:1px solid var(--border);color:var(--text-dim);
+    border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;font-family:inherit;
+  }
+  .logout-btn:active{color:var(--danger);border-color:var(--danger);}
+  @media(max-width:480px){.user-email{display:none;}}
 </style>
 </head>
 <body>
@@ -278,6 +298,16 @@
   <header>
     <div class="header-top">
       <h1>信用取引リスク・追証ライン可視化ツール</h1>
+      <div class="auth-area">
+        <div id="authLoggedOut">
+          <button class="login-btn" id="loginBtn">Googleでログイン</button>
+        </div>
+        <div id="authLoggedIn">
+          <img id="userPhoto" class="user-photo" src="" alt="">
+          <span id="userEmail" class="user-email"></span>
+          <button class="logout-btn" id="logoutBtn">ログアウト</button>
+        </div>
+      </div>
       <button class="icon-btn" id="downloadSrc" title="このツールのソースコードをダウンロード">⤓</button>
     </div>
     <p>保有資産と信用建玉を入力すると、委託保証金維持率・実質レバが自動計算されます。スライダーで株価変動をシミュレートし、追証が発生する株価を直接確認できます。</p>
@@ -409,6 +439,20 @@
 </div>
 
 <script>
+// Firebase 初期化
+const firebaseConfig = {
+  apiKey: "AIzaSyCItdy5OI11Qc51K92Eh-BdnKf8x9wbVN8",
+  authDomain: "margin-call-visualizer.firebaseapp.com",
+  projectId: "margin-call-visualizer",
+  storageBucket: "margin-call-visualizer.firebasestorage.app",
+  messagingSenderId: "499047741056",
+  appId: "1:499047741056:web:be43ee7059430fa7e69865"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+let currentUser = null;
+
 const fmt = n => Math.round(n).toLocaleString('ja-JP');
 const fmtMan = n => (n/10000).toLocaleString('ja-JP', {maximumFractionDigits:1}) + '万円';
 const fmtPct = n => (n>=0?'':'') + n.toFixed(1) + '%';
@@ -436,13 +480,34 @@ function defaultState(){
 }
 
 async function loadState(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, false);
-    if(res && res.value){
-      const parsed = JSON.parse(res.value);
-      if(parsed && parsed.spot && parsed.margin) return parsed;
-    }
-  }catch(e){ /* no saved data yet */ }
+  if(currentUser){
+    try{
+      const doc = await db.collection('users').doc(currentUser.uid)
+        .collection('data').doc('portfolio').get();
+      if(doc.exists){
+        const parsed = doc.data();
+        if(parsed && parsed.spot && parsed.margin) return parsed;
+      }
+      // Firestore にデータがなければ localStorage から移行
+      const local = localStorage.getItem(STORAGE_KEY);
+      if(local){
+        const parsed = JSON.parse(local);
+        if(parsed && parsed.spot && parsed.margin){
+          await db.collection('users').doc(currentUser.uid)
+            .collection('data').doc('portfolio').set(parsed);
+          return parsed;
+        }
+      }
+    }catch(e){}
+  } else {
+    try{
+      const local = localStorage.getItem(STORAGE_KEY);
+      if(local){
+        const parsed = JSON.parse(local);
+        if(parsed && parsed.spot && parsed.margin) return parsed;
+      }
+    }catch(e){}
+  }
   return defaultState();
 }
 
@@ -452,8 +517,14 @@ function scheduleSave(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
     try{
-      await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
-      document.getElementById('saveStatus').textContent = '入力内容は自動保存されます';
+      if(currentUser){
+        await db.collection('users').doc(currentUser.uid)
+          .collection('data').doc('portfolio').set(state);
+        document.getElementById('saveStatus').textContent = 'クラウドに自動保存されます';
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        document.getElementById('saveStatus').textContent = 'ログインするとクラウドに自動保存されます';
+      }
     }catch(e){
       document.getElementById('saveStatus').textContent = '保存に失敗しました';
     }
@@ -1245,13 +1316,43 @@ function downloadSource(){
 }
 
 // ---------- init ----------
-(async function init(){
-  state = await loadState();
-  document.getElementById('cash').value = state.cash || '';
-  document.getElementById('callLine').value = state.callLine || 20;
-  document.getElementById('newBuildRate').value = state.newBuildRate || 30;
+(function init(){
   buildChart();
   render();
+
+  auth.onAuthStateChanged(async (user) => {
+    currentUser = user;
+    if(user){
+      document.getElementById('authLoggedOut').style.display = 'none';
+      document.getElementById('authLoggedIn').style.display = 'flex';
+      document.getElementById('userPhoto').src = user.photoURL || '';
+      document.getElementById('userEmail').textContent = user.email || '';
+      document.getElementById('saveStatus').textContent = 'クラウドと同期中…';
+    } else {
+      document.getElementById('authLoggedOut').style.display = 'flex';
+      document.getElementById('authLoggedIn').style.display = 'none';
+      document.getElementById('saveStatus').textContent = 'ログインするとクラウドに自動保存されます';
+    }
+    state = await loadState();
+    document.getElementById('cash').value = state.cash || '';
+    document.getElementById('callLine').value = state.callLine || 20;
+    document.getElementById('newBuildRate').value = state.newBuildRate || 30;
+    render();
+    if(user){
+      document.getElementById('saveStatus').textContent = 'クラウドに自動保存されます';
+    }
+  });
+
+  document.getElementById('loginBtn').addEventListener('click', () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(e => {
+      alert('ログインに失敗しました: ' + e.message);
+    });
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    if(confirm('ログアウトしますか？')) auth.signOut();
+  });
 })();
 
 </script>
