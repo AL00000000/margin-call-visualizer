@@ -29,7 +29,12 @@
     padding-bottom:48px;
   }
   .num{font-family:"SF Mono","Roboto Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
-  .wrap{max-width:560px;margin:0 auto;padding:18px 14px 0;}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 16px 0;}
+  .pc-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+  .pc-col{min-width:0;}
+  @media(max-width:768px){
+    .pc-grid{display:block;}
+  }
   header{padding:6px 2px 18px;}
   .header-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
   header h1{font-size:18px;margin:0 0 4px;letter-spacing:.01em;font-weight:700;}
@@ -135,7 +140,7 @@
   }
   .cashrow{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
   .cashrow label{font-size:13px;color:var(--text-dim);flex:0 0 70px;}
-  .cashrow input{flex:1;}
+  .cashrow input{width:120px;flex:0 0 120px;}
   .cashrow .unit{font-size:13px;color:var(--text-dim);flex:0 0 auto;}
   .colheads{display:flex;gap:6px;font-size:10.5px;color:var(--text-faint);padding:0 0 4px;}
   .colheads .name{flex:1.3;}
@@ -278,121 +283,127 @@
     <p>保有資産と信用建玉を入力すると、委託保証金維持率・実質レバが自動計算されます。スライダーで株価変動をシミュレートし、追証が発生する株価を直接確認できます。</p>
   </header>
 
-  <div class="card">
-    <h2>スクリーンショットから自動入力</h2>
-    <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 10px;line-height:1.6;">SBI証券などの取引画面のスクリーンショットをアップロードすると、現金残高や保有銘柄を自動で読み取り、下のフォームに入力します。複数枚まとめて選択できます。</p>
-    <input type="file" id="ocrFiles" accept="image/*" multiple>
-    <button class="addbtn" id="ocrRun">画像から読み取って自動入力</button>
-    <div class="ocr-status" id="ocrStatus"></div>
-  </div>
-
-  <div class="card">
-    <h2>現金</h2>
-    <div class="cashrow">
-      <label>現金残高</label>
-      <input type="number" id="cash" inputmode="numeric" placeholder="例: 266">
-      <span class="unit">万円</span>
-    </div>
-
-    <h2 style="margin-top:4px;">現物株式（代用有価証券）</h2>
-    <div class="colheads">
-      <span class="name">銘柄名</span><span class="small">数量</span><span class="small">現在値</span><span class="sp"></span>
-    </div>
-    <div id="spotRows"></div>
-    <button class="addbtn" id="addSpot">＋ 現物株式を追加</button>
-  </div>
-
-  <div class="card">
-    <div class="card-h2-row">
-      <h2 style="margin:0;">信用建玉</h2>
-      <span class="pnl-summary" id="marginPnlSummary"></span>
-    </div>
-    <div class="colheads">
-      <span class="name">銘柄名</span><span class="side">売買</span><span class="small">建値</span><span class="small">数量</span><span class="small">現在値</span><span class="sp"></span>
-    </div>
-    <div id="marginRows"></div>
-    <button class="addbtn" id="addMargin">＋ 信用建玉を追加</button>
-  </div>
-
-  <div class="card">
-    <h2>現在の状態</h2>
-    <div class="big-grid">
-      <div class="stat">
-        <div class="label">委託保証金維持率（公式）</div>
-        <div class="value num" id="ratioOfficial">—</div>
-        <div class="sub">分母は建値ベース・評価益は0扱い</div>
+  <div class="pc-grid">
+    <div class="pc-col">
+      <div class="card">
+        <h2>スクリーンショットから自動入力</h2>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 10px;line-height:1.6;">SBI証券などの取引画面のスクリーンショットをアップロードすると、現金残高や保有銘柄を自動で読み取り、下のフォームに入力します。複数枚まとめて選択できます。</p>
+        <input type="file" id="ocrFiles" accept="image/*" multiple>
+        <button class="addbtn" id="ocrRun">画像から読み取って自動入力</button>
+        <div class="ocr-status" id="ocrStatus"></div>
       </div>
-      <div class="stat">
-        <div class="label">評価益込み維持率</div>
-        <div class="value num" id="ratioDisplay">—</div>
-        <div class="sub">余力には反映されない表示専用値</div>
-      </div>
-      <div class="stat">
-        <div class="label-row">
-          <span class="label">実質レバ</span>
-          <button class="info-btn" id="levInfoBtn" type="button">?</button>
+
+      <div class="card">
+        <h2>現金</h2>
+        <div class="cashrow">
+          <label>現金残高</label>
+          <input type="number" id="cash" inputmode="numeric" placeholder="例: 266">
+          <span class="unit">万円</span>
         </div>
-        <div class="value num" id="effLev">—</div>
-        <div class="sub">総ポジション ÷ 全資産</div>
+
+        <h2 style="margin-top:4px;">現物株式（代用有価証券）</h2>
+        <div class="colheads">
+          <span class="name">銘柄名</span><span class="small">数量</span><span class="small">現在値</span><span class="sp"></span>
+        </div>
+        <div id="spotRows"></div>
+        <button class="addbtn" id="addSpot">＋ 現物株式を追加</button>
       </div>
-      <div class="stat">
-        <div class="label">全資産（参考）</div>
-        <div class="value num" id="netAssets" style="font-size:16px;">—</div>
-        <div class="sub">現金＋現物時価＋信用評価損益</div>
+
+      <div class="card">
+        <div class="card-h2-row">
+          <h2 style="margin:0;">信用建玉</h2>
+          <span class="pnl-summary" id="marginPnlSummary"></span>
+        </div>
+        <div class="colheads">
+          <span class="name">銘柄名</span><span class="side">売買</span><span class="small">建値</span><span class="small">数量</span><span class="small">現在値</span><span class="sp"></span>
+        </div>
+        <div id="marginRows"></div>
+        <button class="addbtn" id="addMargin">＋ 信用建玉を追加</button>
       </div>
     </div>
-    <div class="info-panel" id="levInfoPanel" style="display:none;">
-      <p class="formula">保有株の平均騰落率 × 実質レバレッジ ＝ 資産の騰落率</p>
-      <p class="formula">実質レバレッジ ＝ (現物株式評価額＋信用建玉評価額) ÷ (現金＋現物株式評価額＋信用含み益)</p>
-      <p>委託保証金維持率の問題点を解消できる指標です（たぶん）。</p>
-      <p>問題点① 信用取引の含み益が多いことでリスクが緩和されている点が、維持率には反映されない。</p>
-      <p>問題点② 担保のうち、下落リスクのない現金と、下落リスクのある現物株式の扱いを維持率では区別できない。実質レバではこれを直感的にわかりやすく数値化できているはず。</p>
-    </div>
-  </div>
 
-  <div class="card">
-    <h2>追証ラインシミュレーション</h2>
-    <div class="stress-controls">
-      <select id="stressTarget"></select>
-    </div>
-    <div class="slider-wrap">
-      <div class="slider-label">
-        <span>株価変動率</span>
-        <span class="val num" id="stressVal">0%</span>
+    <div class="pc-col">
+      <div class="card">
+        <h2>現在の状態</h2>
+        <div class="big-grid">
+          <div class="stat">
+            <div class="label">委託保証金維持率（公式）</div>
+            <div class="value num" id="ratioOfficial">—</div>
+            <div class="sub">分母は建値ベース・評価益は0扱い</div>
+          </div>
+          <div class="stat">
+            <div class="label">評価益込み維持率</div>
+            <div class="value num" id="ratioDisplay">—</div>
+            <div class="sub">余力には反映されない表示専用値</div>
+          </div>
+          <div class="stat">
+            <div class="label-row">
+              <span class="label">実質レバ</span>
+              <button class="info-btn" id="levInfoBtn" type="button">?</button>
+            </div>
+            <div class="value num" id="effLev">—</div>
+            <div class="sub">総ポジション ÷ 全資産</div>
+          </div>
+          <div class="stat">
+            <div class="label">全資産（参考）</div>
+            <div class="value num" id="netAssets" style="font-size:16px;">—</div>
+            <div class="sub">現金＋現物時価＋信用評価損益</div>
+          </div>
+        </div>
+        <div class="info-panel" id="levInfoPanel" style="display:none;">
+          <p class="formula">保有株の平均騰落率 × 実質レバレッジ ＝ 資産の騰落率</p>
+          <p class="formula">実質レバレッジ ＝ (現物株式評価額＋信用建玉評価額) ÷ (現金＋現物株式評価額＋信用含み益)</p>
+          <p>委託保証金維持率の問題点を解消できる指標です（たぶん）。</p>
+          <p>問題点① 信用取引の含み益が多いことでリスクが緩和されている点が、維持率には反映されない。</p>
+          <p>問題点② 担保のうち、下落リスクのない現金と、下落リスクのある現物株式の扱いを維持率では区別できない。実質レバではこれを直感的にわかりやすく数値化できているはず。</p>
+        </div>
       </div>
-      <input type="range" id="stressSlider" min="-80" max="0" value="0" step="1">
+
+      <div class="card">
+        <h2>追証ラインシミュレーション</h2>
+        <div class="stress-controls">
+          <select id="stressTarget"></select>
+        </div>
+        <div class="slider-wrap">
+          <div class="slider-label">
+            <span>株価変動率</span>
+            <span class="val num" id="stressVal">0%</span>
+          </div>
+          <input type="range" id="stressSlider" min="-80" max="0" value="0" step="1">
+        </div>
+
+        <div id="calloutBox" class="callout"></div>
+
+        <div class="chartbox">
+          <canvas id="chart" height="190"></canvas>
+        </div>
+
+        <div class="footrow">
+          <label>追証ライン</label>
+          <input type="number" id="callLine" value="20">
+          <label>%</label>
+        </div>
+        <div class="note">グラフは選択した銘柄（または全銘柄一律）を下落させた場合の委託保証金維持率の推移です。赤い破線が追証ラインとの交点です。実際の値動きは銘柄ごとに異なるため、概算の目安としてご利用ください。</div>
+
+        <div class="trace" id="calcTrace"></div>
+      </div>
+
+      <div class="card">
+        <h2>信用益出しレバ拡大シミュレータ</h2>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">既存の信用建玉を一旦すべて決済し、評価益を現金化したうえで建て直した場合に、レバレッジと追証耐性がどう変わるかを比較します。</p>
+        <div class="footrow" style="margin-bottom:14px;">
+          <label>新規建て委託保証金率</label>
+          <input type="number" id="newBuildRate" value="30">
+          <label>%</label>
+        </div>
+        <div id="leverSimResult"></div>
+      </div>
+
+      <div class="savebar">
+        <span id="saveStatus">入力内容は自動保存されます</span>
+        <button id="clearBtn">全データを消去</button>
+      </div>
     </div>
-
-    <div id="calloutBox" class="callout"></div>
-
-    <div class="chartbox">
-      <canvas id="chart" height="190"></canvas>
-    </div>
-
-    <div class="footrow">
-      <label>追証ライン</label>
-      <input type="number" id="callLine" value="20">
-      <label>%</label>
-    </div>
-    <div class="note">グラフは選択した銘柄（または全銘柄一律）を下落させた場合の委託保証金維持率の推移です。赤い破線が追証ラインとの交点です。実際の値動きは銘柄ごとに異なるため、概算の目安としてご利用ください。</div>
-
-    <div class="trace" id="calcTrace"></div>
-  </div>
-
-  <div class="card">
-    <h2>信用益出しレバ拡大シミュレータ</h2>
-    <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">既存の信用建玉を一旦すべて決済し、評価益を現金化したうえで建て直した場合に、レバレッジと追証耐性がどう変わるかを比較します。</p>
-    <div class="footrow" style="margin-bottom:14px;">
-      <label>新規建て委託保証金率</label>
-      <input type="number" id="newBuildRate" value="30">
-      <label>%</label>
-    </div>
-    <div id="leverSimResult"></div>
-  </div>
-
-  <div class="savebar">
-    <span id="saveStatus">入力内容は自動保存されます</span>
-    <button id="clearBtn">全データを消去</button>
   </div>
 
 </div>
