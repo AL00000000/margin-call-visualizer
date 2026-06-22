@@ -355,6 +355,17 @@
           <p>問題点② 担保のうち、下落リスクのない現金と、下落リスクのある現物株式の扱いを維持率では区別できない。実質レバではこれを直感的にわかりやすく数値化できているはず。</p>
         </div>
       </div>
+
+      <div class="card">
+        <h2>信用益出しレバ拡大シミュレータ</h2>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">既存の信用建玉を一旦すべて決済し、評価益を現金化したうえで建て直した場合に、レバレッジと追証耐性がどう変わるかを比較します。</p>
+        <div class="footrow" style="margin-bottom:14px;">
+          <label>新規建て委託保証金率</label>
+          <input type="number" id="newBuildRate" value="30">
+          <label>%</label>
+        </div>
+        <div id="leverSimResult"></div>
+      </div>
     </div>
 
     <div class="pc-col">
@@ -385,17 +396,6 @@
         <div class="note">グラフは選択した銘柄（または全銘柄一律）を下落させた場合の委託保証金維持率の推移です。赤い破線が追証ラインとの交点です。実際の値動きは銘柄ごとに異なるため、概算の目安としてご利用ください。</div>
 
         <div class="trace" id="calcTrace"></div>
-      </div>
-
-      <div class="card">
-        <h2>信用益出しレバ拡大シミュレータ</h2>
-        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">既存の信用建玉を一旦すべて決済し、評価益を現金化したうえで建て直した場合に、レバレッジと追証耐性がどう変わるかを比較します。</p>
-        <div class="footrow" style="margin-bottom:14px;">
-          <label>新規建て委託保証金率</label>
-          <input type="number" id="newBuildRate" value="30">
-          <label>%</label>
-        </div>
-        <div id="leverSimResult"></div>
       </div>
 
       <div class="savebar">
