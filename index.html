@@ -1170,6 +1170,21 @@ function downloadSource(){
 }
 
 // ---------- 終値自動取得 ----------
+async function fetchPriceStooq(code){
+  // stooq.com から終値を取得（日本株は .jp サフィックス）
+  const s = encodeURIComponent(code.toLowerCase() + '.jp');
+  const res = await fetch(`https://stooq.com/q/d/l/?s=${s}&i=d`);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  const lines = text.trim().split('\n');
+  if(lines.length < 2) throw new Error('no data');
+  // CSV: Date,Open,High,Low,Close,Volume — 最終行が最新日
+  const last = lines[lines.length - 1].split(',');
+  const close = parseFloat(last[4]);
+  if(isNaN(close)) throw new Error('parse error');
+  return close;
+}
+
 async function fetchClosingPrices(){
   // JST時刻を取得
   const now = new Date();
@@ -1194,30 +1209,35 @@ async function fetchClosingPrices(){
   statusEl.textContent = '終値を取得中…';
 
   let updated = 0;
+  const errors = [];
   for(const code of codes){
     try{
-      const ticker = encodeURIComponent(code.trim() + '.T');
-      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`);
-      if(!res.ok) continue;
-      const data = await res.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if(price){
-        allRows.forEach(r => { if(r.name === code) r.price = price; });
-        updated++;
-      }
-    }catch(e){ /* 個別銘柄の失敗はスキップ */ }
+      const price = await fetchPriceStooq(code);
+      allRows.forEach(r => { if(r.name === code) r.price = price; });
+      updated++;
+    }catch(e){
+      console.error(`[終値取得失敗] ${code}:`, e.message);
+      errors.push(code);
+    }
   }
 
   if(updated > 0){
     localStorage.setItem('lastPriceFetch', jstDate);
     render();
     scheduleSave();
-    statusEl.textContent = `${updated}銘柄の終値を自動更新しました`;
+    const msg = errors.length > 0
+      ? `${updated}銘柄を更新（${errors.join(',')}は取得失敗）`
+      : `${updated}銘柄の終値を自動更新しました`;
+    statusEl.textContent = msg;
     setTimeout(()=>{
       statusEl.textContent = currentUser ? 'クラウドに自動保存されます' : 'ログインするとクラウドに自動保存されます';
-    }, 4000);
-  } else {
-    statusEl.textContent = currentUser ? 'クラウドに自動保存されます' : 'ログインするとクラウドに自動保存されます';
+    }, 5000);
+  } else if(errors.length > 0){
+    statusEl.textContent = `終値の取得に失敗しました（${errors.join(',')}）`;
+    console.error('[終値取得] 全銘柄失敗。CORSまたはAPI制限の可能性があります。');
+    setTimeout(()=>{
+      statusEl.textContent = currentUser ? 'クラウドに自動保存されます' : 'ログインするとクラウドに自動保存されます';
+    }, 5000);
   }
 }
 
