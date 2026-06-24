@@ -251,6 +251,15 @@
   .lev-row.highlight .v{color:var(--accent);}
   .lev-sub{font-size:10.5px;color:var(--text-faint);margin-top:6px;line-height:1.6;border-top:1px solid var(--border);padding-top:6px;}
 
+  .droptbl{width:100%;border-collapse:collapse;}
+  .droptbl th{font-size:10.5px;color:var(--text-faint);font-weight:700;text-align:right;padding:7px 8px;border-bottom:1px solid var(--border);letter-spacing:.04em;text-transform:uppercase;}
+  .droptbl th:first-child{text-align:left;}
+  .droptbl td{padding:8px 8px;border-bottom:1px solid var(--border);text-align:right;font-size:12.5px;color:var(--text-dim);}
+  .droptbl td:first-child{text-align:left;color:var(--text);}
+  .droptbl tr:last-child td{border-bottom:none;}
+  .droptbl tr.row-danger td{color:var(--danger);}
+  .droptbl tr.row-warn td{color:var(--warn);}
+
   .auth-area{display:flex;align-items:center;gap:8px;margin-right:6px;}
   #authLoggedOut{display:flex;}
   #authLoggedIn{display:none;align-items:center;gap:6px;}
@@ -396,6 +405,12 @@
         <div class="note">グラフは選択した銘柄（または全銘柄一律）を下落させた場合の委託保証金維持率の推移です。赤い破線が追証ラインとの交点です。実際の値動きは銘柄ごとに異なるため、概算の目安としてご利用ください。</div>
 
         <div class="trace" id="calcTrace"></div>
+      </div>
+
+      <div class="card">
+        <h2>下落シナリオ</h2>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">全保有ポジションが一律で下落した場合の委託保証金維持率・全資産への影響です。</p>
+        <div style="overflow-x:auto;" id="volSimGrid"></div>
       </div>
 
       <div class="savebar">
@@ -796,6 +811,61 @@ function renderLevSim(base, callLine){
       + `決済後の現金：¥${fmt(cashAfterRealize)}　／　担保現物株式：¥${fmt(base.spotMV)} × 0.8 ＝ ¥${fmt(base.spotCollateral)}　／　新しい建玉代金合計：¥${fmt(agg3.positionCost)}`);
 }
 
+function renderVolSim(base, callLine){
+  const box = document.getElementById('volSimGrid');
+  if(!box) return;
+
+  const scenarios = [-5, -10, -15, -20, -30, -40, -50];
+  const hasData = base.netAssets > 0 && (base.positionCost > 0 || base.spotMV > 0);
+
+  if(!hasData){
+    box.innerHTML = `<div style="color:var(--text-faint);font-size:12px;padding:8px 0;">入力データがありません。</div>`;
+    return;
+  }
+
+  const warnLine = callLine * 1.25;
+
+  const rows = scenarios.map(pct => {
+    const r = calc(state, {target:'ALL', pct});
+    const change = r.netAssets - base.netAssets;
+    const changePct = (change / base.netAssets) * 100;
+
+    let rowClass = '';
+    if(r.ratioOfficial !== null){
+      if(r.ratioOfficial < callLine) rowClass = 'row-danger';
+      else if(r.ratioOfficial < warnLine) rowClass = 'row-warn';
+    }
+
+    const ratioText = r.ratioOfficial === null ? '—' : r.ratioOfficial.toFixed(1) + '%';
+    const badge = rowClass === 'row-danger'
+      ? ` <span style="font-size:10px;font-weight:700;background:var(--danger);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;">追証</span>`
+      : '';
+
+    return `
+      <tr class="${rowClass}">
+        <td class="num">${pct}%</td>
+        <td class="num">${ratioText}${badge}</td>
+        <td class="num">${changePct.toFixed(1)}%</td>
+        <td class="num">${change >= 0 ? '+' : ''}¥${fmt(change)}</td>
+        <td class="num">${fmtMan(r.netAssets)}</td>
+      </tr>`;
+  }).join('');
+
+  box.innerHTML = `
+    <table class="droptbl">
+      <thead>
+        <tr>
+          <th>下落率</th>
+          <th>維持率</th>
+          <th>全資産減少率</th>
+          <th>損失額</th>
+          <th>残余全資産</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
 // ---------- structural render (rows) ----------
 function render(){
   renderSpotRows();
@@ -916,6 +986,7 @@ function updateStats(){
 
   renderTrace(live, base, stressPct, callLine, target);
   renderLevSim(base, callLine);
+  renderVolSim(base, callLine);
 }
 
 function renderTrace(live, base, stressPct, callLine, target){
