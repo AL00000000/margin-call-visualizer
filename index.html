@@ -259,6 +259,22 @@
   .droptbl tr:last-child td{border-bottom:none;}
   .droptbl tr.row-danger td{color:var(--danger);}
   .droptbl tr.row-warn td{color:var(--warn);}
+  .vol-section-label{font-size:11px;color:var(--text-faint);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;}
+
+  .track-wrap{overflow-x:auto;margin-bottom:8px;}
+  .track-tbl{width:100%;border-collapse:collapse;white-space:nowrap;font-size:12px;}
+  .track-tbl th{font-size:10.5px;color:var(--text-faint);font-weight:700;text-align:center;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--surface2);}
+  .track-tbl td{padding:5px 6px;border-bottom:1px solid var(--border);text-align:center;color:var(--text-dim);}
+  .track-tbl tr:last-child td{border-bottom:none;}
+  .track-tbl .no-cell{color:var(--text-faint);font-size:11px;width:28px;}
+  .tr-inp{background:transparent;border:none;color:var(--text);font-size:12px;text-align:center;outline:none;font-family:inherit;}
+  .tr-inp[type=date]{width:110px;}
+  .tr-inp[type=number]{width:80px;}
+  .tr-inp:focus{background:var(--surface2);border-radius:4px;}
+  .rate-pos{color:var(--safe);}
+  .rate-neg{color:var(--danger);}
+  .del-track-btn{background:none;border:1px solid var(--border);color:var(--text-faint);border-radius:4px;padding:1px 7px;cursor:pointer;font-size:11px;}
+  .del-track-btn:active{border-color:var(--danger);color:var(--danger);}
 
   .auth-area{display:flex;align-items:center;gap:8px;margin-right:6px;}
   #authLoggedOut{display:flex;}
@@ -409,8 +425,14 @@
 
       <div class="card">
         <h2>下落シナリオ</h2>
-        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">全保有ポジションが一律で下落した場合の委託保証金維持率・全資産への影響です。</p>
+        <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.6;">全保有ポジションが一律で下落した場合の維持率・全資産への影響を、純資産ダメージ別・維持率ライン・35%下落の3パターンで表示します。</p>
         <div style="overflow-x:auto;" id="volSimGrid"></div>
+      </div>
+
+      <div class="card">
+        <h2>週次トラッキング</h2>
+        <div class="track-wrap" id="trackWrap"></div>
+        <button class="addbtn" id="addTrackBtn">＋ 行を追加</button>
       </div>
 
       <div class="savebar">
@@ -446,7 +468,8 @@ let state = {
   spot: [],
   margin: [],
   callLine: 20,
-  newBuildRate: 30
+  newBuildRate: 30,
+  tracking: []
 };
 
 const STORAGE_KEY = 'margin-portfolio-v2';
@@ -459,7 +482,8 @@ function defaultState(){
     spot: [{id:uid(), name:'', qty:100, price:''}],
     margin: [{id:uid(), name:'', side:'buy', entryPrice:'', qty:100, price:''}],
     callLine: 20,
-    newBuildRate: 30
+    newBuildRate: 30,
+    tracking: []
   };
 }
 
@@ -780,14 +804,21 @@ function renderLevSim(base, callLine){
   const r2 = calcAgg(agg2.cash, agg2.spotMV, agg2.positionCost, agg2.positionMV);
   const x2 = findCrossingAgg(agg2, callLine);
 
-  // ③ 益出しして再構築した場合
-  const realizedPnL = base.pnlRaw;
-  const cashAfterRealize = cashYen + (realizedPnL >= 0 ? realizedPnL * 0.8 : realizedPnL);
-  const r3base = calcAgg(cashAfterRealize, base.spotMV, 0, 0);
-  const maxPositionCost3 = r3base.marginOfficial > 0 ? r3base.marginOfficial / rate : 0;
-  const agg3 = {cash: cashAfterRealize, spotMV: base.spotMV, positionCost: maxPositionCost3, positionMV: maxPositionCost3};
+  // ③ 同値で建て直した場合（損益確定・同値再建）
+  const realizedPnLSame = base.pnlRaw;
+  const cashAfterSame = cashYen + (realizedPnLSame >= 0 ? realizedPnLSame * 0.8 : realizedPnLSame);
+  const agg3 = {cash: cashAfterSame, spotMV: base.spotMV, positionCost: base.positionMV, positionMV: base.positionMV};
   const r3 = calcAgg(agg3.cash, agg3.spotMV, agg3.positionCost, agg3.positionMV);
   const x3 = findCrossingAgg(agg3, callLine);
+
+  // ④ 益出しして再構築した場合
+  const realizedPnL = base.pnlRaw;
+  const cashAfterRealize = cashYen + (realizedPnL >= 0 ? realizedPnL * 0.8 : realizedPnL);
+  const r4base = calcAgg(cashAfterRealize, base.spotMV, 0, 0);
+  const maxPositionCost4 = r4base.marginOfficial > 0 ? r4base.marginOfficial / rate : 0;
+  const agg4 = {cash: cashAfterRealize, spotMV: base.spotMV, positionCost: maxPositionCost4, positionMV: maxPositionCost4};
+  const r4 = calcAgg(agg4.cash, agg4.spotMV, agg4.positionCost, agg4.positionMV);
+  const x4 = findCrossingAgg(agg4, callLine);
 
   function scenarioHTML(title, r, crossing, subHTML){
     return `
@@ -806,18 +837,19 @@ function renderLevSim(base, callLine){
     scenarioHTML('② 新規建て余力をすべて使い切った場合', r2, x2,
       `現金：¥${fmt(agg1.cash)}　＋　代用有価証券評価額：¥${fmt(base.spotMV)}×0.8＝¥${fmt(base.spotCollateral)}　＋　評価損益（マイナスのみ計上）：¥${fmt(r1.pnlCapped)}　＝　保証金合計：¥${fmt(marginTotal1)}<br>`
       + `保証金合計：¥${fmt(marginTotal1)}　÷　新規建て委託保証金率 ${(rate*100).toFixed(0)}%　＝　新規建て可能総額：¥${fmt(maxPositionCost2)}`) +
-    scenarioHTML('③ 信用建玉をすべて決済し、益出ししたうえで再構築した場合', r3, x3,
+    scenarioHTML('③ 信用建玉をすべて決済し、同値で建て直した場合', r3, x3,
+      `信用評価損益：${realizedPnLSame>=0?'+':''}¥${fmt(realizedPnLSame)}（${realizedPnLSame>=0?'評価益×0.8を現金化':'評価損をそのまま現金から減算'}）<br>`
+      + `建て直し後の現金：¥${fmt(cashAfterSame)}　／　建玉代金合計（現値で再建）：¥${fmt(agg3.positionCost)}`) +
+    scenarioHTML('④ 信用建玉をすべて決済し、益出ししたうえで再構築した場合', r4, x4,
       `信用評価損益：${realizedPnL>=0?'+':''}¥${fmt(realizedPnL)}（${realizedPnL>=0?'評価益×0.8を現金化':'評価損をそのまま現金から減算'}）<br>`
-      + `決済後の現金：¥${fmt(cashAfterRealize)}　／　担保現物株式：¥${fmt(base.spotMV)} × 0.8 ＝ ¥${fmt(base.spotCollateral)}　／　新しい建玉代金合計：¥${fmt(agg3.positionCost)}`);
+      + `決済後の現金：¥${fmt(cashAfterRealize)}　／　担保現物株式：¥${fmt(base.spotMV)} × 0.8 ＝ ¥${fmt(base.spotCollateral)}　／　新しい建玉代金合計：¥${fmt(agg4.positionCost)}`);
 }
 
 function renderVolSim(base, callLine){
   const box = document.getElementById('volSimGrid');
   if(!box) return;
 
-  const scenarios = [-5, -10, -15, -20, -30, -40, -50];
   const hasData = base.netAssets > 0 && (base.positionCost > 0 || base.spotMV > 0);
-
   if(!hasData){
     box.innerHTML = `<div style="color:var(--text-faint);font-size:12px;padding:8px 0;">入力データがありません。</div>`;
     return;
@@ -825,51 +857,167 @@ function renderVolSim(base, callLine){
 
   const warnLine = callLine * 1.25;
 
-  const rows = scenarios.map(pct => {
-    const r = calc(state, {target:'ALL', pct});
-    const change = r.netAssets - base.netAssets;
-    const changePct = (change / base.netAssets) * 100;
+  const tableHead = `<thead><tr>
+    <th>実質レバ</th><th>維持率</th><th>純資産ダメージ</th><th>下落率</th><th>損失額</th><th>残余全資産</th>
+  </tr></thead>`;
 
+  function makeRow(r, dropPct){
+    const change = r.netAssets - base.netAssets;
+    const changePct = base.netAssets > 0 ? (change / base.netAssets) * 100 : 0;
     let rowClass = '';
     if(r.ratioOfficial !== null){
       if(r.ratioOfficial < callLine) rowClass = 'row-danger';
       else if(r.ratioOfficial < warnLine) rowClass = 'row-warn';
     }
-
     const ratioText = r.ratioOfficial === null ? '—' : r.ratioOfficial.toFixed(1) + '%';
+    const levText = r.effLev === null ? '—' : r.effLev.toFixed(2);
     const badge = rowClass === 'row-danger'
       ? ` <span style="font-size:10px;font-weight:700;background:var(--danger);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px;">追証</span>`
       : '';
+    return `<tr class="${rowClass}">
+      <td class="num">${levText}</td>
+      <td class="num">${ratioText}${badge}</td>
+      <td class="num">${changePct.toFixed(1)}%</td>
+      <td class="num">${dropPct.toFixed(2)}%</td>
+      <td class="num">${fmtMan(Math.abs(change))}</td>
+      <td class="num">${fmtMan(r.netAssets)}</td>
+    </tr>`;
+  }
 
-    return `
-      <tr class="${rowClass}">
-        <td class="num">${pct}%</td>
-        <td class="num">${ratioText}${badge}</td>
-        <td class="num">${changePct.toFixed(1)}%</td>
-        <td class="num">${change >= 0 ? '+' : ''}¥${fmt(change)}</td>
-        <td class="num">${fmtMan(r.netAssets)}</td>
-      </tr>`;
+  // 純資産ダメージ別テーブル
+  const damageRates = [10, 20, 40, 50, 100];
+  const damageRows = damageRates.map(d => {
+    if(!base.effLev || base.effLev <= 0) return `<tr><td colspan="6" style="color:var(--text-faint)">—</td></tr>`;
+    const dropPct = d / base.effLev;
+    if(dropPct > 100){
+      return `<tr class="row-danger"><td class="num">—</td><td class="num">—</td><td class="num">-${d}%</td><td class="num">100%超</td><td colspan="2" style="color:var(--text-faint)">—</td></tr>`;
+    }
+    const r = calc(state, {target:'ALL', pct: -dropPct});
+    return makeRow(r, dropPct);
   }).join('');
 
+  // 維持率XX%ライン
+  const crossing = getCrossingForTarget('ALL', callLine);
+  let maintLineHTML;
+  if(base.positionCost <= 0){
+    maintLineHTML = `<tr><td colspan="6" style="color:var(--text-faint);text-align:center">信用建玉を入力してください</td></tr>`;
+  } else if(crossing === null){
+    maintLineHTML = `<tr><td colspan="6" style="color:var(--text-faint);text-align:center">−80%まで下落しても追証ライン(${callLine}%)を割りません</td></tr>`;
+  } else {
+    const r = calc(state, {target:'ALL', pct: crossing});
+    maintLineHTML = makeRow(r, Math.abs(crossing));
+  }
+
+  // ポジション35%下落
+  const r35 = calc(state, {target:'ALL', pct: -35});
+  const drop35HTML = makeRow(r35, 35);
+
   box.innerHTML = `
-    <table class="droptbl">
-      <thead>
-        <tr>
-          <th>下落率</th>
-          <th>維持率</th>
-          <th>全資産減少率</th>
-          <th>損失額</th>
-          <th>残余全資産</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+    <div class="vol-section-label">純資産へのダメージ別</div>
+    <table class="droptbl">${tableHead}<tbody>${damageRows}</tbody></table>
+    <div class="vol-section-label" style="margin-top:14px">維持率 ${callLine}% になるとき</div>
+    <table class="droptbl">${tableHead}<tbody>${maintLineHTML}</tbody></table>
+    <div class="vol-section-label" style="margin-top:14px">ポジション下落率 35% のとき</div>
+    <table class="droptbl">${tableHead}<tbody>${drop35HTML}</tbody></table>
+  `;
+}
+
+// ---------- 週次トラッキング ----------
+function fmtRate(r){
+  if(r === null) return `<span style="color:var(--text-faint)">—</span>`;
+  const sign = r >= 0 ? '+' : '';
+  const cls = r >= 0 ? 'rate-pos' : 'rate-neg';
+  return `<span class="${cls}">${sign}${r.toFixed(1)}%</span>`;
+}
+
+function sortTracking(){
+  state.tracking.sort((a, b) => {
+    if(!a.date && !b.date) return 0;
+    if(!a.date) return 1;
+    if(!b.date) return -1;
+    return a.date.localeCompare(b.date);
+  });
+}
+
+function renderTracking(){
+  const wrap = document.getElementById('trackWrap');
+  if(!wrap) return;
+  const rows = state.tracking;
+
+  if(rows.length === 0){
+    wrap.innerHTML = `<div style="color:var(--text-faint);font-size:12px;padding:8px 0;">行を追加して記録を始めてください。</div>`;
+    return;
+  }
+
+  const headRow1 = `<tr>
+    <th rowspan="2" class="no-cell">No.</th>
+    <th rowspan="2">日付</th>
+    <th rowspan="2">銘柄A<br>株価</th>
+    <th rowspan="2">資産<br>（万円）</th>
+    <th colspan="2" style="background:var(--surface)">No.1比</th>
+    <th colspan="2" style="background:var(--surface)">1つ前比</th>
+    <th rowspan="2"></th>
+  </tr>`;
+  const headRow2 = `<tr>
+    <th>株価率</th><th>資産率</th>
+    <th>株価率</th><th>資産率</th>
+  </tr>`;
+
+  const bodyRows = rows.map((row, i) => {
+    const ref1 = i > 0 ? rows[0] : null;
+    const refPrev = i > 0 ? rows[i-1] : null;
+    const pr1   = ref1?.price  && row.price  ? (row.price  - ref1.price)  / ref1.price  * 100 : null;
+    const ar1   = ref1?.assets && row.assets ? (row.assets - ref1.assets) / ref1.assets * 100 : null;
+    const prP   = refPrev?.price  && row.price  ? (row.price  - refPrev.price)  / refPrev.price  * 100 : null;
+    const arP   = refPrev?.assets && row.assets ? (row.assets - refPrev.assets) / refPrev.assets * 100 : null;
+    return `<tr>
+      <td class="no-cell">${i+1}</td>
+      <td><input type="date" class="tr-inp" data-tid="${row.id}" data-tf="date" value="${row.date||''}"></td>
+      <td><input type="number" class="tr-inp" data-tid="${row.id}" data-tf="price" value="${row.price??''}" placeholder="0" min="0"></td>
+      <td><input type="number" class="tr-inp" data-tid="${row.id}" data-tf="assets" value="${row.assets??''}" placeholder="0" min="0"></td>
+      <td>${fmtRate(pr1)}</td><td>${fmtRate(ar1)}</td>
+      <td>${fmtRate(prP)}</td><td>${fmtRate(arP)}</td>
+      <td><button class="del-track-btn" data-tid="${row.id}">×</button></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="track-tbl"><thead>${headRow1}${headRow2}</thead><tbody>${bodyRows}</tbody></table>`;
+
+  wrap.querySelectorAll('.tr-inp').forEach(el => {
+    el.addEventListener('change', e => {
+      const id = e.target.dataset.tid;
+      const f  = e.target.dataset.tf;
+      const r  = state.tracking.find(x => x.id === id);
+      if(!r) return;
+      r[f] = f === 'date' ? e.target.value : (parseFloat(e.target.value) || null);
+      if(f === 'date') sortTracking();
+      renderTracking();
+      scheduleSave();
+    });
+    el.addEventListener('keydown', e => {
+      if(e.key !== 'Enter') return;
+      e.preventDefault();
+      const all = [...wrap.querySelectorAll('.tr-inp')];
+      const idx = all.indexOf(e.target);
+      if(idx < all.length - 1) all[idx+1].focus();
+    });
+  });
+
+  wrap.querySelectorAll('.del-track-btn').forEach(el => {
+    el.addEventListener('click', e => {
+      const id = e.target.dataset.tid;
+      state.tracking = state.tracking.filter(x => x.id !== id);
+      renderTracking();
+      scheduleSave();
+    });
+  });
 }
 
 // ---------- structural render (rows) ----------
 function render(){
   renderSpotRows();
   renderMarginRows();
+  renderTracking();
   updateStats();
 }
 
@@ -1208,6 +1356,14 @@ document.addEventListener('click', (e)=>{
     if(type==='spot') state.spot = state.spot.filter(x=>x.id!==id);
     if(type==='margin') state.margin = state.margin.filter(x=>x.id!==id);
     render(); scheduleSave();
+  }
+  if(e.target.id === 'addTrackBtn'){
+    const today = new Date().toISOString().split('T')[0];
+    if(!state.tracking) state.tracking = [];
+    state.tracking.push({id:uid(), date:today, price:null, assets:null});
+    sortTracking();
+    renderTracking();
+    scheduleSave();
   }
   if(e.target.id === 'clearBtn'){
     if(confirm('入力した内容をすべて消去します。よろしいですか？')){
